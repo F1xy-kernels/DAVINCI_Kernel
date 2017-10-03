@@ -317,7 +317,4 @@ static inline int arch_write_trylock(arch_rwlock_t *lock)
 	return 0;
 }
 
-#define arch_read_lock_flags(lock, flags) arch_read_lock(lock)
-#define arch_write_lock_flags(lock, flags) arch_write_lock(lock)
-
 #endif	/* _ASM_M32R_SPINLOCK_H */

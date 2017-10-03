@@ -225,22 +225,4 @@ static inline int arch_read_trylock(arch_rwlock_t *rw)
 	return tmp;
 }
 
-/* read_can_lock - would read_trylock() succeed? */
-static inline int arch_read_can_lock(arch_rwlock_t *rw)
-{
-	int tmp;
-
-	asm volatile ("LNKGETD	%0, [%1]\n"
-		      "CMP	%0, %2\n"
-		      "MOV	%0, #1\n"
-		      "XORZ	%0, %0, %0\n"
-		      : "=&d" (tmp)
-		      : "da" (&rw->lock), "bd" (0x80000000)
-		      : "cc");
-	return tmp;
-}
-
-#define	arch_read_lock_flags(lock, flags) arch_read_lock(lock)
-#define	arch_write_lock_flags(lock, flags) arch_write_lock(lock)
-
 #endif /* __ASM_SPINLOCK_LNKGET_H */

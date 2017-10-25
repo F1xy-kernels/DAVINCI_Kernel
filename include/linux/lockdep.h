@@ -530,6 +530,11 @@ static inline void lockdep_set_selftest_task(struct task_struct *task)
  */
 struct lock_class_key { };
 
+/*
+ * The lockdep_map takes no space if lockdep is disabled:
+ */
+struct lockdep_map { };
+
 #define lockdep_depth(tsk)	(0)
 
 #define lockdep_is_held_type(l, r)		(1)

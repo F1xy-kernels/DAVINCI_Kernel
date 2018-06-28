@@ -52,6 +52,7 @@
 #include <linux/notifier.h>
 #include <linux/fb.h>
 #endif
+#include <linux/pm_qos.h>
 
 /* macros definition */
 #define GOODIX_CORE_DRIVER_NAME		"goodix_ts"
@@ -482,10 +483,10 @@ struct goodix_ts_core {
 	struct work_struct sleep_work;
 	bool tp_already_suspend;
 	struct completion pm_resume_completion;
+	struct pm_qos_request pm_touch_req;
 #ifdef CONFIG_TOUCHSCREEN_GOODIX_DEBUG_FS
 	struct dentry *debugfs;
 #endif
-
 };
 
 struct goodix_mode_switch {

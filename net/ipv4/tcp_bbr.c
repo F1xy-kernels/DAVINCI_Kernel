@@ -346,7 +346,7 @@ static void bbr_cwnd_event(struct sock *sk, enum tcp_ca_event event)
 
 /* Calculate bdp based on min RTT and the estimated bottleneck bandwidth:
  *
- * bdp = ceil(bw * min_rtt * gain)
+ * bdp = bw * min_rtt * gain
  *
  * The key factor, gain, controls the amount of queue. While a small gain
  * builds a smaller queue, it becomes more vulnerable to noise in RTT
@@ -370,9 +370,7 @@ static u32 bbr_bdp(struct sock *sk, u32 bw, int gain)
 
 	w = (u64)bw * bbr->min_rtt_us;
 
-	/* Apply a gain to the given value, remove the BW_SCALE shift, and
-	 * round the value up to avoid a negative feedback loop.
-	 */
+	/* Apply a gain to the given value, then remove the BW_SCALE shift. */
 	bdp = (((w * gain) >> BBR_SCALE) + BW_UNIT - 1) / BW_UNIT;
 
 	return bdp;
@@ -388,7 +386,7 @@ static u32 bbr_bdp(struct sock *sk, u32 bw, int gain)
  * which allows 2 outstanding 2-packet sequences, to try to keep pipe
  * full even with ACK-every-other-packet delayed ACKs.
  */
-static u32 bbr_quantization_budget(struct sock *sk, u32 cwnd)
+static u32 bbr_quantization_budget(struct sock *sk, u32 cwnd, int gain)
 {
 	struct bbr *bbr = inet_csk_ca(sk);
 
@@ -411,25 +409,9 @@ static u32 bbr_inflight(struct sock *sk, u32 bw, int gain)
 	u32 inflight;
 
 	inflight = bbr_bdp(sk, bw, gain);
-	inflight = bbr_quantization_budget(sk, inflight);
+	inflight = bbr_quantization_budget(sk, inflight, gain);
 
 	return inflight;
-}
-
-/* Find the cwnd increment based on estimate of ack aggregation */
-static u32 bbr_ack_aggregation_cwnd(struct sock *sk)
-{
-	u32 max_aggr_cwnd, aggr_cwnd = 0;
-
-	if (bbr_extra_acked_gain && bbr_full_bw_reached(sk)) {
-		max_aggr_cwnd = ((u64)bbr_bw(sk) * bbr_extra_acked_max_us)
-				/ BW_UNIT;
-		aggr_cwnd = (bbr_extra_acked_gain * bbr_extra_acked(sk))
-			     >> BBR_SCALE;
-		aggr_cwnd = min(aggr_cwnd, max_aggr_cwnd);
-	}
-
-	return aggr_cwnd;
 }
 
 /* An optimization in BBR to reduce losses: On the first round of recovery, we
@@ -501,6 +483,8 @@ static void bbr_set_cwnd(struct sock *sk, const struct rate_sample *rs,
 	target_cwnd = bbr_quantization_budget(sk, target_cwnd);
 
 	/* If we're below target cwnd, slow start cwnd toward target cwnd. */
+	target_cwnd = bbr_bdp(sk, bw, gain);
+	target_cwnd = bbr_quantization_budget(sk, target_cwnd, gain);
 	if (bbr_full_bw_reached(sk))  /* only cut cwnd if we filled the pipe */
 		cwnd = min(cwnd + acked, target_cwnd);
 	else if (cwnd < target_cwnd || tp->delivered < TCP_INIT_CWND)
@@ -860,7 +844,7 @@ static void bbr_check_drain(struct sock *sk, const struct rate_sample *rs)
 	if (bbr->mode == BBR_STARTUP && bbr_full_bw_reached(sk)) {
 		bbr->mode = BBR_DRAIN;	/* drain queue we created */
 		tcp_sk(sk)->snd_ssthresh =
-				bbr_target_cwnd(sk, bbr_max_bw(sk), BBR_UNIT);
+				bbr_inflight(sk, bbr_max_bw(sk), BBR_UNIT);
 	}	/* fall through to check if in-flight is already small: */
 	if (bbr->mode == BBR_DRAIN &&
 	    tcp_packets_in_flight(tcp_sk(sk)) <=

@@ -775,17 +775,44 @@ look_up_lock_class(struct lockdep_map *lock, unsigned int subclass)
 	return is_static || static_obj(lock->key) ? NULL : ERR_PTR(-EINVAL);
 }
 
-#ifdef CONFIG_LOCKDEP_CROSSRELEASE
-static void cross_init(struct lockdep_map *lock, int cross);
-static int cross_lock(struct lockdep_map *lock);
-static int lock_acquire_crosslock(struct held_lock *hlock);
-static int lock_release_crosslock(struct lockdep_map *lock);
-#else
-static inline void cross_init(struct lockdep_map *lock, int cross) {}
-static inline int cross_lock(struct lockdep_map *lock) { return 0; }
-static inline int lock_acquire_crosslock(struct held_lock *hlock) { return 2; }
-static inline int lock_release_crosslock(struct lockdep_map *lock) { return 2; }
+/*
+ * Static locks do not have their class-keys yet - for them the key is
+ * the lock object itself. If the lock is in the per cpu area, the
+ * canonical address of the lock (per cpu offset removed) is used.
+ */
+static bool assign_lock_key(struct lockdep_map *lock)
+{
+	unsigned long can_addr, addr = (unsigned long)lock;
+
+#ifdef __KERNEL__
+	/*
+	 * lockdep_free_key_range() assumes that struct lock_class_key
+	 * objects do not overlap. Since we use the address of lock
+	 * objects as class key for static objects, check whether the
+	 * size of lock_class_key objects does not exceed the size of
+	 * the smallest lock object.
+	 */
+	BUILD_BUG_ON(sizeof(struct lock_class_key) > sizeof(raw_spinlock_t));
 #endif
+
+	if (__is_kernel_percpu_address(addr, &can_addr))
+		lock->key = (void *)can_addr;
+	else if (__is_module_percpu_address(addr, &can_addr))
+		lock->key = (void *)can_addr;
+	else if (static_obj(lock))
+		lock->key = (void *)lock;
+	else {
+		/* Debug-check: all keys must be persistent! */
+		debug_locks_off();
+		pr_err("INFO: trying to register non-static key.\n");
+		pr_err("the code is fine but needs lockdep annotation.\n");
+		pr_err("turning off the locking correctness validator.\n");
+		dump_stack();
+		return false;
+	}
+
+	return true;
+}
 
 /* Check whether element @e occurs in list @h */
 static bool in_list(struct list_head *e, struct list_head *h)

@@ -583,11 +583,9 @@ static unsigned long mremap_to(unsigned long addr, unsigned long old_len,
 	if ((mm->map_count + 2) >= sysctl_max_map_count - 3)
 		return -ENOMEM;
 
-	if (flags & MREMAP_FIXED) {
-		ret = do_munmap(mm, new_addr, new_len, uf_unmap_early);
-		if (ret)
-			goto out;
-	}
+	ret = do_munmap(mm, new_addr, new_len, uf_unmap_early);
+	if (ret)
+		goto out;
 
 	if (old_len >= new_len) {
 		ret = do_munmap(mm, addr+new_len, old_len - new_len, uf_unmap);

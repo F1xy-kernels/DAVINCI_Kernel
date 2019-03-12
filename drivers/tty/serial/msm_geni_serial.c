@@ -600,6 +600,8 @@ static int msm_geni_serial_ioctl(struct uart_port *uport, unsigned int cmd,
 
 	mutex_lock(&port->ioctl_mutex);
 
+	mutex_lock(&port->ioctl_mutex);
+
 	if (port->pm_auto_suspend_disable)
 		return ret;
 

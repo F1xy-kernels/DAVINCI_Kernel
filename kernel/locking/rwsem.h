@@ -1,4 +1,32 @@
 /* SPDX-License-Identifier: GPL-2.0 */
+/*
+ * The least significant 2 bits of the owner value has the following
+ * meanings when set.
+ *  - RWSEM_READER_OWNED (bit 0): The rwsem is owned by readers
+ *  - RWSEM_ANONYMOUSLY_OWNED (bit 1): The rwsem is anonymously owned,
+ *    i.e. the owner(s) cannot be readily determined. It can be reader
+ *    owned or the owning writer is indeterminate.
+ *
+ * When a writer acquires a rwsem, it puts its task_struct pointer
+ * into the owner field. It is cleared after an unlock.
+ *
+ * When a reader acquires a rwsem, it will also puts its task_struct
+ * pointer into the owner field with both the RWSEM_READER_OWNED and
+ * RWSEM_ANONYMOUSLY_OWNED bits set. On unlock, the owner field will
+ * largely be left untouched. So for a free or reader-owned rwsem,
+ * the owner value may contain information about the last reader that
+ * acquires the rwsem. The anonymous bit is set because that particular
+ * reader may or may not still own the lock.
+ *
+ * That information may be helpful in debugging cases where the system
+ * seems to hang on a reader owned rwsem especially if only one reader
+ * is involved. Ideally we would like to track all the readers that own
+ * a rwsem, but the overhead is simply too big.
+ */
+#include "lock_events.h"
+
+#define RWSEM_READER_OWNED	(1UL << 0)
+#define RWSEM_ANONYMOUSLY_OWNED	(1UL << 1)
 
 #ifdef CONFIG_DEBUG_RWSEMS
 # define DEBUG_RWSEMS_WARN_ON(c, sem)	do {			\
@@ -174,6 +202,7 @@ static inline int __down_read_trylock(struct rw_semaphore *sem)
 	 */
 	long tmp = RWSEM_UNLOCKED_VALUE;
 
+	lockevent_inc(rwsem_rtrylock);
 	do {
 		if (atomic_long_try_cmpxchg_acquire(&sem->count, &tmp,
 					tmp + RWSEM_ACTIVE_READ_BIAS)) {
@@ -215,6 +244,7 @@ static inline int __down_write_trylock(struct rw_semaphore *sem)
 {
 	long tmp;
 
+	lockevent_inc(rwsem_wtrylock);
 	tmp = atomic_long_cmpxchg_acquire(&sem->count, RWSEM_UNLOCKED_VALUE,
 		      RWSEM_ACTIVE_WRITE_BIAS);
 	if (tmp == RWSEM_UNLOCKED_VALUE) {

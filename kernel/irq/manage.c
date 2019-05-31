@@ -20,8 +20,19 @@
 #include <linux/sched/task.h>
 #include <uapi/linux/sched/types.h>
 #include <linux/task_work.h>
+#include <linux/cpu.h>
 
 #include "internals.h"
+
+struct irq_desc_list {
+	struct list_head list;
+	struct irq_desc *desc;
+} perf_crit_irqs = {
+	.list = LIST_HEAD_INIT(perf_crit_irqs.list)
+};
+
+static DEFINE_RAW_SPINLOCK(perf_irqs_lock);
+static int perf_cpu_index = -1;
 
 #ifdef CONFIG_IRQ_FORCED_THREADING
 __read_mostly bool force_irqthreads;
@@ -1196,16 +1207,6 @@ static void affine_one_perf_irq(struct irq_desc *desc)
 {
 	int cpu;
 
-	/*
-	* If for some reason all perf cores are offline,
-	* then affine the IRQ to the cores that are left online.
-	*/
-	if (!cpumask_intersects(cpu_perf_mask, cpu_online_mask)) {
-		irq_set_affinity_locked(&desc->irq_data, cpu_online_mask, true);
-		perf_cpu_index = -1;
-		return;
-	}
-
 	/* Balance the performance-critical IRQs across all perf CPUs */
 	while (1) {
 		cpu = cpumask_next_and(perf_cpu_index, cpu_perf_mask,
@@ -1222,6 +1223,7 @@ static void affine_one_perf_irq(struct irq_desc *desc)
 static void setup_perf_irq_locked(struct irq_desc *desc)
 {
 	add_desc_to_perf_list(desc);
+	irqd_set(&desc->irq_data, IRQD_AFFINITY_MANAGED);
 	raw_spin_lock(&perf_irqs_lock);
 	affine_one_perf_irq(desc);
 	raw_spin_unlock(&perf_irqs_lock);
@@ -1359,6 +1361,9 @@ __setup_irq(unsigned int irq, struct irq_desc *desc, struct irqaction *new)
 			if (ret)
 				goto out_thread;
 		}
+
+		if (new->flags & IRQF_PERF_CRITICAL)
+			affine_one_perf_thread(new->thread);
 	}
 
 	/*

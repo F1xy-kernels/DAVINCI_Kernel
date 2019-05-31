@@ -1208,9 +1208,10 @@ static void affine_one_perf_irq(struct irq_desc *desc)
 	perf_cpu_index = cpu;
 }
 
-void setup_perf_irq_locked(struct irq_desc *desc)
+static void setup_perf_irq_locked(struct irq_desc *desc)
 {
 	add_desc_to_perf_list(desc);
+	irqd_set(&desc->irq_data, IRQD_AFFINITY_MANAGED);
 	raw_spin_lock(&perf_irqs_lock);
 	affine_one_perf_irq(desc);
 	raw_spin_unlock(&perf_irqs_lock);
@@ -1532,6 +1533,9 @@ __setup_irq(unsigned int irq, struct irq_desc *desc, struct irqaction *new)
 			irqd_set(&desc->irq_data, IRQD_NO_BALANCING);
 		}
 
+		if (new->flags & IRQF_PERF_CRITICAL)
+			setup_perf_irq_locked(desc);
+
 		if (irq_settings_can_autoenable(desc)) {
 			irq_startup(desc, IRQ_RESEND, IRQ_START_COND);
 		} else {
@@ -1698,6 +1702,20 @@ static struct irqaction *__free_irq(unsigned int irq, void *dev_id)
 		if (action->dev_id == dev_id)
 			break;
 		action_ptr = &action->next;
+	}
+
+	if (action->flags & IRQF_PERF_CRITICAL) {
+		struct irq_desc_list *data;
+
+		raw_spin_lock(&perf_irqs_lock);
+		list_for_each_entry(data, &perf_crit_irqs.list, list) {
+			if (data->desc == desc) {
+				list_del(&data->list);
+				kfree(data);
+				break;
+			}
+		}
+		raw_spin_unlock(&perf_irqs_lock);
 	}
 
 	/* Found it - now remove it from the list of entries: */

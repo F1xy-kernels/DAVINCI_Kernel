@@ -55,7 +55,7 @@ bool kthread_is_per_cpu(struct task_struct *k);
 /**
  * kthread_run_perf_critical - create and wake a performance-critical thread.
  *
- * Same as kthread_create().
+ * Same as kthread_run(), but with the kthread bound to performance CPUs.
  */
 #define kthread_run_perf_critical(threadfn, data, namefmt, ...)		   \
 ({									   \

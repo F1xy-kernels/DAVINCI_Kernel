@@ -374,6 +374,8 @@ static long sync_file_ioctl_fence_info(struct sync_file *sync_file,
 				       unsigned long arg)
 {
 	struct sync_file_info info;
+	struct sync_fence_info *fence_info = NULL;
+	struct sync_fence_info fence_info_onstack[4] __aligned(8);
 	struct dma_fence **fences;
 	size_t len, offset;
 	int num_fences, i;
@@ -404,7 +406,17 @@ static long sync_file_ioctl_fence_info(struct sync_file *sync_file,
 	if (info.num_fences < num_fences)
 		return -EINVAL;
 
-	offset = offsetof(struct sync_fence_info, status);
+	size = num_fences * sizeof(*fence_info);
+
+	if (likely(size <= sizeof(fence_info_onstack))) {
+		memset(&fence_info_onstack, 0, sizeof(fence_info_onstack));
+		fence_info = fence_info_onstack;
+	} else {
+		fence_info = kzalloc(size, GFP_KERNEL);
+		if (!fence_info)
+			return -ENOMEM;
+	}
+
 	for (i = 0; i < num_fences; i++) {
 		struct {
 			__s32	status;
@@ -426,9 +438,17 @@ static long sync_file_ioctl_fence_info(struct sync_file *sync_file,
 
 no_fences:
 	info.num_fences = num_fences;
-	if (copy_to_user((void __user *)arg, &info.status, len))
-		return -EFAULT;
-	return 0;
+
+	if (copy_to_user((void __user *)arg, &info, sizeof(info)))
+		ret = -EFAULT;
+	else
+		ret = 0;
+
+out:
+	if (unlikely(fence_info != fence_info_onstack))
+		kfree(fence_info);
+
+	return ret;
 }
 
 static long sync_file_ioctl(struct file *file, unsigned int cmd,

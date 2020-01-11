@@ -379,7 +379,6 @@ AS		= $(CROSS_COMPILE)as
 LD		= $(CROSS_COMPILE)ld
 CC		= $(CROSS_COMPILE)gcc
 LDGOLD		= $(CROSS_COMPILE)ld.gold
-LDLLD		= ld.lld
 CPP		= $(CC) -E
 AR		= $(CROSS_COMPILE)ar
 NM		= $(CROSS_COMPILE)nm
@@ -671,12 +670,14 @@ export CFLAGS_GCOV
 
 # Make toolchain changes before including arch/$(SRCARCH)/Makefile to ensure
 # ar/cc/ld-* macros return correct values.
+ifeq ($(cc-name),clang)
 ifdef CONFIG_LD_GOLD
 LDFINAL_vmlinux := $(LD)
 LD		:= $(LDGOLD)
 endif
 ifdef CONFIG_LD_LLD
-LD		:= $(LDLLD)
+LD		:= ld.lld
+endif
 endif
 
 ifdef CONFIG_LTO_CLANG

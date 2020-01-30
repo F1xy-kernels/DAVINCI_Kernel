@@ -3883,9 +3883,10 @@ int gsi_config_channel_mode(unsigned long chan_hdl, enum gsi_chan_mode mode)
 	else
 		curr = GSI_CHAN_MODE_CALLBACK;
 
-	if (mode == curr) {
-		GSIDBG("already in requested mode %u chan_hdl=%lu\n",
+	if (unlikely(mode == curr)) {
+		GSIERR("already in requested mode %u chan_hdl=%lu\n",
 				curr, chan_hdl);
+		spin_unlock_irqrestore(&gsi_ctx->slock, flags);
 		return -GSI_STATUS_UNSUPPORTED_OP;
 	}
 	if (curr == GSI_CHAN_MODE_CALLBACK &&

@@ -129,7 +129,10 @@ static bool migrate_one_irq(struct irq_desc *desc)
 			return false;
 		}
 
-		default_affinity = desc->affinity_hint ? : irq_default_affinity;
+		if (irqd_has_set(&desc->irq_data, IRQF_PERF_CRITICAL))
+			default_affinity = cpu_perf_mask;
+		else
+			default_affinity = desc->affinity_hint ? : irq_default_affinity;
 		/*
 		 * The order of preference for selecting a fallback CPU is
 		 *

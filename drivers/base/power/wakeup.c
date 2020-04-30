@@ -944,10 +944,8 @@ bool pm_wakeup_pending(void)
 	spin_unlock_irqrestore(&events_lock, flags);
 
 	if (ret) {
-		pm_get_active_wakeup_sources(suspend_abort,
-					     MAX_SUSPEND_ABORT_LEN);
-		log_suspend_abort_reason(suspend_abort);
-		pr_info("PM: %s\n", suspend_abort);
+		pr_debug("PM: Wakeup pending, aborting suspend\n");
+		pm_print_active_wakeup_sources();
 	}
 
 	return ret || atomic_read(&pm_abort_suspend) > 0;

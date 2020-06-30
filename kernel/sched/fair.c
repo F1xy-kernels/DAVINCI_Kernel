@@ -7440,8 +7440,7 @@ static inline bool task_fits_max(struct task_struct *p, int cpu)
 	if (capacity == max_capacity)
 		return true;
 
-	if ((task_boost_policy(p) == SCHED_BOOST_ON_BIG ||
-			schedtune_task_boost(p) > 0) &&
+	if ((schedtune_task_boost(p) > 0 && p->prio <= DEFAULT_PRIO) &&
 			is_min_capacity_cpu(cpu))
 		return false;
 
@@ -7926,7 +7925,7 @@ static inline int find_best_target(struct task_struct *p, int *backup_cpu,
 		 */
 		if ((prefer_idle && best_idle_cpu != -1) ||
 		    (boosted && (best_idle_cpu != -1 || target_cpu != -1))) {
-			if (boosted) {
+			if (boosted && p->prio <= DEFAULT_PRIO) {
 				/*
 				 * For boosted task, stop searching when an idle
 				 * cpu is found in mid cluster.
@@ -8260,7 +8259,7 @@ static int find_energy_efficient_cpu(struct sched_domain *sd,
 	int placement_boost = task_boost_policy(p);
 	u64 start_t = 0;
 	int next_cpu = -1, backup_cpu = -1;
-	int boosted = schedtune_task_boost(p);
+	int boosted = (schedtune_task_boost(p) > 0 && p->prio <= DEFAULT_PRIO);
 	bool about_to_idle = (cpu_rq(cpu)->nr_running < 2);
 
 	fbt_env.fastpath = 0;
@@ -8478,11 +8477,7 @@ select_task_rq_fair(struct task_struct *p, int prev_cpu, int sd_flag, int wake_f
 
 		if (sysctl_sched_sync_hint_enable && sync &&
 				_cpus_allowed && !_wake_cap &&
-<<<<<<< HEAD
 				wake_affine_idle(sd, p, cpu, prev_cpu, sync) &&
-=======
-				wake_affine_idle(cpu, prev_cpu, sync) &&
->>>>>>> 3a89b7aed06e (sched: fix warnings)
 				cpu_is_in_target_set(p, cpu)) {
 			rcu_read_unlock();
 			return cpu;

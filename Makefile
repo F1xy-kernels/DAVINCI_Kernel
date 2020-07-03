@@ -882,29 +882,7 @@ KBUILD_CFLAGS	+= $(call cc-option,-fdata-sections,)
 endif
 
 ifdef CONFIG_LTO_CLANG
-ifdef CONFIG_THINLTO
-lto-clang-flags := -flto=thin -fsplit-lto-unit
-ifdef THINLTO_CACHE
-ifeq ($(ld-name),lld)
-LDFLAGS 	+= --thinlto-cache-dir=$(THINLTO_CACHE)
-LDFLAGS 	+= --thinlto-cache-policy=cache_size=5%:cache_size_bytes=5g
-else
-LDFLAGS 	+= -plugin-opt,cache-dir=$(THINLTO_CACHE)
-LDFLAGS 	+= -plugin-opt,cache-policy=cache_size=5%:cache_size_bytes=5g
-endif
-endif
-else
-lto-clang-flags	:= -flto
-endif
-lto-clang-flags += -fvisibility=default $(call cc-option, -fsplit-lto-unit)
-
-# Limit inlining across translation units to reduce binary size
-LD_FLAGS_LTO_CLANG := -mllvm -import-instr-limit=5
-
-KBUILD_LDFLAGS += $(LD_FLAGS_LTO_CLANG)
-KBUILD_LDFLAGS_MODULE += $(LD_FLAGS_LTO_CLANG)
-
-KBUILD_LDFLAGS_MODULE += -T scripts/module-lto.lds
+lto-clang-flags	:= -flto -fvisibility=hidden
 
 # allow disabling only clang LTO where needed
 DISABLE_LTO_CLANG := -fno-lto

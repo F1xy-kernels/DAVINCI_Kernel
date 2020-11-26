@@ -3782,7 +3782,9 @@ int hdd_wlan_start_modules(struct hdd_context *hdd_ctx, bool reinit)
 		 */
 		hdd_spectral_register_to_dbr(hdd_ctx);
 
+#ifdef WLAN_POWER_DEBUG
 		hdd_sysfs_create_driver_root_obj();
+#endif
 		hdd_sysfs_create_version_interface(hdd_ctx->psoc);
 		hdd_sysfs_create_powerstats_interface();
 		hdd_sysfs_dp_aggregation_create();
@@ -3831,7 +3833,9 @@ destroy_driver_sysfs:
 	hdd_sysfs_dp_aggregation_destroy();
 	hdd_sysfs_destroy_powerstats_interface();
 	hdd_sysfs_destroy_version_interface();
+#ifdef WLAN_POWER_DEBUG
 	hdd_sysfs_destroy_driver_root_obj();
+#endif
 	cds_post_disable();
 
 unregister_notifiers:
@@ -8686,32 +8690,6 @@ out:
 }
 
 /**
- * hdd_rx_wake_lock_destroy() - Destroy RX wakelock
- * @hdd_ctx:	HDD context.
- *
- * Destroy RX wakelock.
- *
- * Return: None.
- */
-static void hdd_rx_wake_lock_destroy(struct hdd_context *hdd_ctx)
-{
-	qdf_wake_lock_destroy(&hdd_ctx->rx_wake_lock);
-}
-
-/**
- * hdd_rx_wake_lock_create() - Create RX wakelock
- * @hdd_ctx:	HDD context.
- *
- * Create RX wakelock.
- *
- * Return: None.
- */
-static void hdd_rx_wake_lock_create(struct hdd_context *hdd_ctx)
-{
-	qdf_wake_lock_create(&hdd_ctx->rx_wake_lock, "qcom_rx_wakelock");
-}
-
-/**
  * hdd_context_deinit() - Deinitialize HDD context
  * @hdd_ctx:    HDD context.
  *
@@ -8728,8 +8706,6 @@ static int hdd_context_deinit(struct hdd_context *hdd_ctx)
 	wlan_hdd_cfg80211_deinit(hdd_ctx->wiphy);
 
 	hdd_sap_context_destroy(hdd_ctx);
-
-	hdd_rx_wake_lock_destroy(hdd_ctx);
 
 	hdd_scan_context_destroy(hdd_ctx);
 
@@ -11189,8 +11165,6 @@ static int hdd_context_init(struct hdd_context *hdd_ctx)
 	if (ret)
 		goto list_destroy;
 
-	hdd_rx_wake_lock_create(hdd_ctx);
-
 	ret = hdd_sap_context_init(hdd_ctx);
 	if (ret)
 		goto scan_destroy;
@@ -11214,7 +11188,6 @@ sap_destroy:
 
 scan_destroy:
 	hdd_scan_context_destroy(hdd_ctx);
-	hdd_rx_wake_lock_destroy(hdd_ctx);
 list_destroy:
 	qdf_list_destroy(&hdd_ctx->hdd_adapters);
 
@@ -13573,7 +13546,9 @@ int hdd_wlan_stop_modules(struct hdd_context *hdd_ctx, bool ftm_mode)
 	hdd_sysfs_dp_aggregation_destroy();
 	hdd_sysfs_destroy_powerstats_interface();
 	hdd_sysfs_destroy_version_interface();
+#ifdef WLAN_POWER_DEBUG
 	hdd_sysfs_destroy_driver_root_obj();
+#endif
 	hdd_debug("Closing CDS modules!");
 
 	if (hdd_get_conparam() != QDF_GLOBAL_EPPING_MODE) {

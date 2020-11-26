@@ -10,7 +10,7 @@ do.systemless=0
 do.cleanup=1
 do.cleanuponabort=0
 device.name1=davinci
-device.name2=
+device.name2=davinciin
 device.name3=
 device.name4=
 device.name5=
@@ -20,7 +20,7 @@ supported.versions=
 # shell variables
 block=/dev/block/bootdevice/by-name/boot;
 is_slot_device=0;
-ramdisk_compression=none;
+ramdisk_compression=auto;
 
 ## AnyKernel methods (DO NOT CHANGE)
 # import patching functions/variables - see for reference
@@ -73,6 +73,6 @@ if mountpoint -q /data; then
 fi
 
 flash_boot;
-flash_dtbo;
+#flash_dtbo;
 
 ## end install

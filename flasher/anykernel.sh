@@ -73,6 +73,6 @@ if mountpoint -q /data; then
 fi
 
 flash_boot;
-#flash_dtbo;
+flash_dtbo;
 
 ## end install

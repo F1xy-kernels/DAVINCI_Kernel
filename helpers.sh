@@ -163,14 +163,14 @@ function mkzip() {
 	fi
 
 	# Copy kernel image
-	cp "$kroot/out/arch/$arch/boot/Image.gz" "$kroot/flasher/"
+	cp "$kroot/out/arch/$arch/boot/Image.gz-dtb" "$kroot/flasher/"
 
 	# Copy device tree blob
 	# rm -fr "$kroot/flasher"
 	# mkdir "$kroot/flasher"
 
 	# Copy dtbo.img
-	# cp "$kroot/out/arch/$arch/boot/dtbo.img" "$kroot/flasher/"
+	cp "$kroot/out/arch/$arch/boot/dtbo.img" "$kroot/flasher/"
 
 	# Generate version banner to be shown during flash
 	echo "  • Installing $build_type build $version" >| "$kroot/flasher/version"

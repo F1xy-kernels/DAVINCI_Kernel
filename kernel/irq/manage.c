@@ -1195,16 +1195,6 @@ static void affine_one_perf_irq(struct irq_desc *desc)
 {
 	int cpu;
 
-	/*
-	* If for some reason all perf cores are offline,
-	* then affine the IRQ to the cores that are left online.
-	*/
-	if (!cpumask_intersects(cpu_perf_mask, cpu_online_mask)) {
-		irq_set_affinity_locked(&desc->irq_data, cpu_online_mask, true);
-		perf_cpu_index = -1;
-		return;
-	}
-
 	/* Balance the performance-critical IRQs across all perf CPUs */
 	while (1) {
 		cpu = cpumask_next_and(perf_cpu_index, cpu_perf_mask,
@@ -1218,9 +1208,10 @@ static void affine_one_perf_irq(struct irq_desc *desc)
 	perf_cpu_index = cpu;
 }
 
-static void setup_perf_irq_locked(struct irq_desc *desc)
+void setup_perf_irq_locked(struct irq_desc *desc)
 {
 	add_desc_to_perf_list(desc);
+	irqd_set(&desc->irq_data, IRQD_AFFINITY_MANAGED);
 	raw_spin_lock(&perf_irqs_lock);
 	affine_one_perf_irq(desc);
 	raw_spin_unlock(&perf_irqs_lock);
@@ -1358,6 +1349,9 @@ __setup_irq(unsigned int irq, struct irq_desc *desc, struct irqaction *new)
 			if (ret)
 				goto out_thread;
 		}
+
+		if (new->flags & IRQF_PERF_CRITICAL)
+			affine_one_perf_thread(new->thread);
 	}
 
 	/*
@@ -1552,7 +1546,6 @@ __setup_irq(unsigned int irq, struct irq_desc *desc, struct irqaction *new)
 			/* Undo nested disables: */
 			desc->depth = 1;
 		}
-
 	} else if (new->flags & IRQF_TRIGGER_MASK) {
 		unsigned int nmsk = new->flags & IRQF_TRIGGER_MASK;
 		unsigned int omsk = irqd_get_trigger_type(&desc->irq_data);

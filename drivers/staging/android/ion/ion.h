@@ -131,10 +131,9 @@ struct ion_buffer {
 	spinlock_t freelist_lock;
 	void *priv_virt;
 	void *vaddr;
-	unsigned int flags;
-	unsigned int private_flags;
-	size_t size;
-	int kmap_refcount;
+	struct sg_table *sg_table;
+	struct list_head attachments;
+	struct list_head vmas;
 	struct msm_iommu_data iommu_data;
 };
 

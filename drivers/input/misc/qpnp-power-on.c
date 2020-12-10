@@ -1288,7 +1288,7 @@ qpnp_pon_request_irqs(struct qpnp_pon *pon, struct qpnp_pon_config *cfg)
 	switch (cfg->pon_type) {
 	case PON_KPDPWR:
 		rc = devm_request_irq(pon->dev, cfg->state_irq, qpnp_kpdpwr_irq,
-				IRQF_TRIGGER_RISING | IRQF_TRIGGER_FALLING,
+				IRQF_TRIGGER_RISING | IRQF_TRIGGER_FALLING | IRQF_NO_SUSPEND,
 				"pon_kpdpwr_status", pon);
 		if (rc < 0) {
 			dev_err(pon->dev, "IRQ %d request failed, rc=%d\n",
@@ -1310,7 +1310,7 @@ qpnp_pon_request_irqs(struct qpnp_pon *pon, struct qpnp_pon_config *cfg)
 		break;
 	case PON_RESIN:
 		rc = devm_request_irq(pon->dev, cfg->state_irq, qpnp_resin_irq,
-				IRQF_TRIGGER_RISING | IRQF_TRIGGER_FALLING,
+				IRQF_TRIGGER_RISING | IRQF_TRIGGER_FALLING | IRQF_NO_SUSPEND,
 				"pon_resin_status", pon);
 		if (rc < 0) {
 			dev_err(pon->dev, "IRQ %d request failed, rc=%d\n",
@@ -1355,15 +1355,6 @@ qpnp_pon_request_irqs(struct qpnp_pon *pon, struct qpnp_pon_config *cfg)
 		break;
 	default:
 		return -EINVAL;
-	}
-
-	/* Mark the interrupts wakeable if they support linux-key */
-	if (cfg->key_code) {
-		enable_irq_wake(cfg->state_irq);
-
-		/* Special handling for RESIN due to a hardware bug */
-		if (cfg->pon_type == PON_RESIN && cfg->support_reset)
-			enable_irq_wake(cfg->bark_irq);
 	}
 
 	return 0;

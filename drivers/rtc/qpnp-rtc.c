@@ -610,7 +610,7 @@ static int qpnp_rtc_probe(struct platform_device *pdev)
 
 	/* Request the alarm IRQ */
 	rc = request_any_context_irq(rtc_dd->rtc_alarm_irq,
-				 qpnp_alarm_trigger, IRQF_TRIGGER_RISING,
+				 qpnp_alarm_trigger, IRQF_TRIGGER_RISING | IRQF_NO_SUSPEND,
 				 "qpnp_rtc_alarm", rtc_dd);
 	if (rc) {
 		dev_err(&pdev->dev, "Request IRQ failed (%d)\n", rc);
@@ -618,7 +618,6 @@ static int qpnp_rtc_probe(struct platform_device *pdev)
 	}
 
 	device_init_wakeup(&pdev->dev, 1);
-	enable_irq_wake(rtc_dd->rtc_alarm_irq);
 
 	dev_dbg(&pdev->dev, "Probe success !!\n");
 
@@ -708,12 +707,10 @@ static int qpnp_rtc_restore(struct device *dev)
 
 		/* Re-register for alarm Interrupt */
 		rc = request_any_context_irq(rtc_dd->rtc_alarm_irq,
-				 qpnp_alarm_trigger, IRQF_TRIGGER_RISING,
+				 qpnp_alarm_trigger, IRQF_TRIGGER_RISING | IRQF_NO_SUSPEND,
 				 "qpnp_rtc_alarm", rtc_dd);
 		if (rc)
 			pr_err("Request IRQ failed (%d)\n", rc);
-		else
-			enable_irq_wake(rtc_dd->rtc_alarm_irq);
 	}
 
 	return rc;

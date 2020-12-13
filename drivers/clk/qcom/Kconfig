@@ -316,6 +316,12 @@ config CLOCK_CPU_OSM_660
 	 existence of multiple OSM domains.
 	 Say Y if you want to support OSM clocks.
 
+config CLOCK_CPU_OSM_TABLE_EDIT
+	bool "Addon to adjust cpufreq tables"
+	depends on CLOCK_CPU_OSM
+	help
+	  Support for editing cpufreq tables when dtb editing isn't available.
+
 config MSM_DISPCC_SM8150
 	tristate "SM8150 Display Clock Controller"
 	depends on COMMON_CLK_QCOM

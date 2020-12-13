@@ -648,6 +648,56 @@ static unsigned int osm_cpufreq_get(unsigned int cpu)
 	return policy->freq_table[index].frequency;
 }
 
+struct cpufreq_pair {
+	int cpu;
+	int freq;
+};
+
+#ifdef CONFIG_CLOCK_CPU_OSM_TABLE_EDIT
+static struct cpufreq_pair preset_pairs[] = {
+	/* Little cluster */
+	{ 0, 1324800 },
+	{ 0, 1497600 },
+	{ 0, 1708800 },
+	{ 0, 1804800 },
+	/* Big cluster */
+	{ 6, 1324800 },
+	{ 6, 1843200 },
+	{ 6, 1939200 },
+	{ 6, 2208000 },
+};
+
+static void invalidate_freqs(int cpu, int entries, struct cpufreq_frequency_table *table)
+{
+	int i = 0, a = 0;
+
+	for (i = 0; i < ARRAY_SIZE(preset_pairs); i++) {
+		struct cpufreq_pair target_pair = preset_pairs[i];
+		if (cpu == target_pair.cpu)
+			target_pair = preset_pairs[i];
+		else continue;
+
+		for (a = 0; a < entries; a++) {
+			target_pair = preset_pairs[i];
+			/* Invalid(ated) freqs */
+			if (table[a].frequency < 1)
+				return;
+			/*
+			 * Second check is for cases when we're cutting freqs
+			 * above highest defined in efficient array.
+			 */
+			if (table[a].frequency != target_pair.freq || i >= ARRAY_SIZE(preset_pairs)) {
+				pr_info("removing freq %i", table[a].frequency);
+				table[a].frequency = CPUFREQ_ENTRY_INVALID;
+			} else {
+				pr_info("leaving freq %i", table[a].frequency);
+				i++;
+			}
+		}
+	}
+}
+#endif
+
 static int osm_cpufreq_cpu_init(struct cpufreq_policy *policy)
 {
 	struct cpufreq_frequency_table *table;
@@ -706,6 +756,9 @@ static int osm_cpufreq_cpu_init(struct cpufreq_policy *policy)
 			break;
 		}
 	}
+#ifdef CONFIG_CLOCK_CPU_OSM_TABLE_EDIT
+	invalidate_freqs(policy->cpu, parent->osm_table_size, table);
+#endif
 	table[i].frequency = CPUFREQ_TABLE_END;
 
 	ret = cpufreq_table_validate_and_show(policy, table);

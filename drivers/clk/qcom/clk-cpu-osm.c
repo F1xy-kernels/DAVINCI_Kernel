@@ -788,11 +788,21 @@ static int osm_cpufreq_cpu_init(struct cpufreq_policy *policy)
 
 		/* Two of the same frequencies means end of table */
 		if (i > 0 && table[i - 1].driver_data == table[i].driver_data) {
-			struct cpufreq_frequency_table *prev = &table[i - 1];
-
-			if (prev->frequency == CPUFREQ_ENTRY_INVALID) {
-				prev->flags = CPUFREQ_BOOST_FREQ;
-				prev->frequency = prev->driver_data;
+			int a = 0;
+			for (a = i; a > 0; a--) {
+				struct cpufreq_frequency_table *prev = &table[a - 1];
+				/*
+				 * If both freqs are invalid, find the last valid + invalid pair,
+				 * set the smaller one as boost frequency and end the table.
+				 */
+				if (prev->frequency == CPUFREQ_ENTRY_INVALID &&
+					table[a].frequency == CPUFREQ_ENTRY_INVALID) {
+					a--;
+				} else {
+					prev->flags = CPUFREQ_BOOST_FREQ;
+					prev->frequency = prev->driver_data;
+					break;
+				}
 			}
 
 			break;

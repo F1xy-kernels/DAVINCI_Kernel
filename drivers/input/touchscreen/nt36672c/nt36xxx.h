@@ -211,6 +211,7 @@ struct nvt_ts_data {
 	struct workqueue_struct *event_wq;
 	/*struct work_struct suspend_work;*/
 	struct work_struct resume_work;
+	struct work_struct irq_work;
 	int result_type;
 	int ic_state;
 	int gesture_command_delayed;

@@ -30,6 +30,7 @@
 
 #include <linux/regulator/consumer.h>
 #include <linux/pm_qos.h>
+#include <linux/spi/spi-geni-qcom.h>
 
 #ifdef CONFIG_HAS_EARLYSUSPEND
 #include <linux/earlysuspend.h>
@@ -181,7 +182,8 @@ struct nvt_ts_data {
 	struct pinctrl *ts_pinctrl;
 	struct pinctrl_state *pinctrl_state_active;
 	struct pinctrl_state *pinctrl_state_suspend;
-	struct pm_qos_request pm_qos_req;
+	struct pm_qos_request pm_spi_req;
+	struct pm_qos_request pm_touch_req;
 #ifndef NVT_SAVE_TESTDATA_IN_FILE
 	void *testdata;
 #endif
@@ -205,7 +207,6 @@ struct nvt_ts_data {
 	u8 palm_sensor_switch;
 	bool palm_sensor_changed;
 	bool gamemode_enabled;
->>>>>>> 77095dc701e6 (touchscreen: nt36xxx: optimize coordinate reporting and i2c reads/writes):drivers/input/touchscreen/nt36xxx_spi/nt36xxx.h
 #endif
 	struct workqueue_struct *event_wq;
 	/*struct work_struct suspend_work;*/

@@ -2111,6 +2111,20 @@ static struct irqaction *__free_percpu_irq(unsigned int irq, void __percpu *dev_
 		goto bad;
 	}
 
+	if (irqd_has_set(&desc->irq_data, IRQF_PERF_CRITICAL)) {
+		struct irq_desc_list *data;
+
+		raw_spin_lock(&perf_irqs_lock);
+		list_for_each_entry(data, &perf_crit_irqs.list, list) {
+			if (data->desc == desc) {
+				list_del(&data->list);
+				kfree(data);
+				break;
+			}
+		}
+		raw_spin_unlock(&perf_irqs_lock);
+	}
+
 	/* Found it - now remove it from the list of entries: */
 	desc->action = NULL;
 

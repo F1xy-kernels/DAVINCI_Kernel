@@ -30,6 +30,7 @@
 #include <drm/drm_atomic.h>
 #include <drm/drm_mode.h>
 #include <drm/drm_print.h>
+#include <linux/pm_qos.h>
 #include <linux/sync_file.h>
 #include <linux/devfreq_boost.h>
 
@@ -2205,8 +2206,8 @@ static void complete_crtc_signaling(struct drm_device *dev,
 	kfree(fence_state);
 }
 
-int drm_mode_atomic_ioctl(struct drm_device *dev,
-			  void *data, struct drm_file *file_priv)
+static int __drm_mode_atomic_ioctl(struct drm_device *dev, void *data,
+				   struct drm_file *file_priv)
 {
 	struct drm_mode_atomic *arg = data;
 	uint32_t __user *objs_ptr = (uint32_t __user *)(unsigned long)(arg->objs_ptr);
@@ -2375,5 +2376,40 @@ out:
 	drm_modeset_drop_locks(&ctx);
 	drm_modeset_acquire_fini(&ctx);
 
+	return ret;
+}
+
+void set_cpus_allowed_common(struct task_struct *p,
+			     const struct cpumask *new_mask);
+
+int drm_mode_atomic_ioctl(struct drm_device *dev, void *data,
+			  struct drm_file *file_priv)
+{
+	struct cpumask old_cpus_allowed, qos_cpus;
+	struct pm_qos_request req;
+	int ret;
+
+	preempt_disable();
+
+	/* Don't let the current task migrate to another CPU */
+	cpumask_copy(&qos_cpus, cpumask_of(raw_smp_processor_id()));
+	cpumask_copy(&old_cpus_allowed, &current->cpus_allowed);
+	set_cpus_allowed_common(current, &qos_cpus);
+
+	/* Don't let the CPU use deep idle states while the ioctl runs */
+	req = (typeof(req)){
+		.type = PM_QOS_REQ_AFFINE_CORES,
+		.cpus_affine = qos_cpus,
+	};
+	pm_qos_add_request(&req, PM_QOS_CPU_DMA_LATENCY, 100);
+	preempt_enable_no_resched();
+
+	ret = __drm_mode_atomic_ioctl(dev, data, file_priv);
+
+	/* Restore everything back to normal */
+	preempt_disable();
+	pm_qos_remove_request(&req);
+	set_cpus_allowed_common(current, &old_cpus_allowed);
+	preempt_enable_no_resched();
 	return ret;
 }

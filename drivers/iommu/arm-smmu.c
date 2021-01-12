@@ -1597,8 +1597,8 @@ static void print_ctx_regs(struct arm_smmu_device *smmu, struct arm_smmu_cfg
 
 	dev_err(smmu->dev, "FAR    = 0x%016llx\n",
 		readq_relaxed(cb_base + ARM_SMMU_CB_FAR));
-	dev_err(smmu->dev, "PAR    = 0x%016llx\n",
-		readq_relaxed(cb_base + ARM_SMMU_CB_PAR));
+	dev_err(smmu->dev, "PAR    = 0x%pK\n",
+		(void *)readq_relaxed(cb_base + ARM_SMMU_CB_PAR));
 
 	dev_err(smmu->dev,
 		"FSR    = 0x%08x [%s%s%s%s%s%s%s%s%s%s]\n",
@@ -1617,16 +1617,16 @@ static void print_ctx_regs(struct arm_smmu_device *smmu, struct arm_smmu_cfg
 		(fsr & 0x80000000) ? "MULTI " : "");
 
 	if (cfg->fmt == ARM_SMMU_CTX_FMT_AARCH32_S) {
-		dev_err(smmu->dev, "TTBR0  = 0x%08x\n",
-			readl_relaxed(cb_base + ARM_SMMU_CB_TTBR0));
-		dev_err(smmu->dev, "TTBR1  = 0x%08x\n",
-			readl_relaxed(cb_base + ARM_SMMU_CB_TTBR1));
+		dev_err(smmu->dev, "TTBR0  = 0x%pK\n",
+			(void *)(long)readl_relaxed(cb_base + ARM_SMMU_CB_TTBR0));
+		dev_err(smmu->dev, "TTBR1  = 0x%pK\n",
+			(void *)(long)readl_relaxed(cb_base + ARM_SMMU_CB_TTBR1));
 	} else {
-		dev_err(smmu->dev, "TTBR0  = 0x%016llx\n",
-			readq_relaxed(cb_base + ARM_SMMU_CB_TTBR0));
+		dev_err(smmu->dev, "TTBR0  = 0x%pK\n",
+			(void *)readq_relaxed(cb_base + ARM_SMMU_CB_TTBR0));
 		if (stage1)
-			dev_err(smmu->dev, "TTBR1  = 0x%016llx\n",
-				readq_relaxed(cb_base + ARM_SMMU_CB_TTBR1));
+			dev_err(smmu->dev, "TTBR1  = 0x%pK\n",
+				(void *)readq_relaxed(cb_base + ARM_SMMU_CB_TTBR1));
 	}
 
 
@@ -6496,7 +6496,8 @@ static irqreturn_t arm_smmu_debug_capture_bus_match(int irq, void *dev)
 	void __iomem *tbu_base = tbu->base;
 	u64 mask[NO_OF_MASK_AND_MATCH], match[NO_OF_MASK_AND_MATCH];
 	u64 snapshot[NO_OF_CAPTURE_POINTS][REGS_PER_CAPTURE_POINT];
-	int i, j, val;
+	unsigned long val;
+	int i, j;
 
 	if (arm_smmu_power_on(smmu->pwr) || arm_smmu_power_on(tbu->pwr))
 		return IRQ_NONE;
@@ -6509,7 +6510,7 @@ static irqreturn_t arm_smmu_debug_capture_bus_match(int irq, void *dev)
 	arm_smmu_power_off(tbu->pwr);
 	arm_smmu_power_off(smmu->pwr);
 
-	dev_info(tbu->dev, "TNX_TCR_CNTL : 0x%0x\n", val);
+	dev_info(tbu->dev, "TNX_TCR_CNTL : 0x%0lx\n", val);
 
 	for (i = 0; i < NO_OF_MASK_AND_MATCH; ++i) {
 		dev_info(tbu->dev,

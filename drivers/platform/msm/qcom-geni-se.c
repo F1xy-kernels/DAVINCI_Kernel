@@ -2050,9 +2050,9 @@ static int geni_se_probe(struct platform_device *pdev)
 		}
 
 		ret = sysfs_create_file(&geni_se_dev->dev->kobj,
-			 &dev_attr_ssc_qup_state.attr);
+					&dev_attr_ssc_qup_state.attr);
 		if (ret) {
-			dev_err(dev, "Unable to create sysfs\n");
+			dev_err(dev, "Error making sysfs file, ret: %d\n", ret);
 			return ret;
 		}
 	}

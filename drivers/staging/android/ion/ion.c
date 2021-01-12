@@ -64,10 +64,19 @@ static struct ion_buffer *ion_buffer_create(struct ion_heap *heap, size_t len,
 	if (!buffer)
 		return ERR_PTR(-ENOMEM);
 
-	INIT_LIST_HEAD(&buffer->iommu_data.map_list);
-	mutex_init(&buffer->iommu_data.lock);
-	buffer->heap = heap;
-	buffer->flags = flags;
+	*buffer = (typeof(*buffer)){
+		.flags = flags,
+		.heap = heap,
+		.size = len,
+		.kmap_lock = __MUTEX_INITIALIZER(buffer->kmap_lock),
+		.free = __WORK_INITIALIZER(buffer->free, ion_buffer_free_work),
+		.map_freelist = LIST_HEAD_INIT(buffer->map_freelist),
+		.freelist_lock = __SPIN_LOCK_INITIALIZER(buffer->freelist_lock),
+		.iommu_data = {
+			.map_list = LIST_HEAD_INIT(buffer->iommu_data.map_list),
+			.lock = __MUTEX_INITIALIZER(buffer->iommu_data.lock)
+		}
+	};
 
 	ret = heap->ops->allocate(heap, buffer, len, flags);
 	if (ret) {
@@ -86,156 +95,6 @@ free_buffer:
 	return ERR_PTR(ret);
 }
 
-void ion_buffer_destroy(struct ion_buffer *buffer)
-{
-	if (buffer->kmap_cnt > 0) {
-		pr_warn_ratelimited("ION client likely missing a call to dma_buf_kunmap or dma_buf_vunmap\n");
-		buffer->heap->ops->unmap_kernel(buffer->heap, buffer);
-	}
-	buffer->heap->ops->free(buffer);
-	kfree(buffer);
-}
-
-static void _ion_buffer_destroy(struct ion_buffer *buffer)
-{
-	struct ion_heap *heap = buffer->heap;
-	struct ion_device *dev = buffer->dev;
-
-	msm_dma_buf_freed(&buffer->iommu_data);
-
-	mutex_lock(&dev->buffer_lock);
-	rb_erase(&buffer->node, &dev->buffers);
-	mutex_unlock(&dev->buffer_lock);
-
-	atomic_long_sub(buffer->size, &buffer->heap->total_allocated);
-	if (heap->flags & ION_HEAP_FLAG_DEFER_FREE)
-		ion_heap_freelist_add(heap, buffer);
-	else
-		ion_buffer_destroy(buffer);
-}
-
-static void *ion_buffer_kmap_get(struct ion_buffer *buffer)
-{
-	void *vaddr;
-
-	if (buffer->kmap_cnt) {
-		buffer->kmap_cnt++;
-		return buffer->vaddr;
-	}
-	vaddr = buffer->heap->ops->map_kernel(buffer->heap, buffer);
-	if (WARN_ONCE(vaddr == NULL,
-		      "heap->ops->map_kernel should return ERR_PTR on error"))
-		return ERR_PTR(-EINVAL);
-	if (IS_ERR(vaddr))
-		return vaddr;
-	buffer->vaddr = vaddr;
-	buffer->kmap_cnt++;
-	return vaddr;
-}
-
-static void ion_buffer_kmap_put(struct ion_buffer *buffer)
-{
-	if (buffer->kmap_cnt == 0) {
-		pr_warn_ratelimited("ION client likely missing a call to dma_buf_kmap or dma_buf_vmap, pid:%d\n",
-				    current->pid);
-		return;
-	}
-
-	buffer->kmap_cnt--;
-	if (!buffer->kmap_cnt) {
-		buffer->heap->ops->unmap_kernel(buffer->heap, buffer);
-		buffer->vaddr = NULL;
-	}
-}
-
-static struct sg_table *dup_sg_table(struct sg_table *table)
-{
-	struct sg_table *new_table;
-	int ret, i;
-	struct scatterlist *sg, *new_sg;
-
-	new_table = kzalloc(sizeof(*new_table), GFP_KERNEL);
-	if (!new_table)
-		return ERR_PTR(-ENOMEM);
-
-	ret = sg_alloc_table(new_table, table->nents, GFP_KERNEL);
-	if (ret) {
-		kfree(new_table);
-		return ERR_PTR(-ENOMEM);
-	}
-
-	new_sg = new_table->sgl;
-	for_each_sg(table->sgl, sg, table->nents, i) {
-		memcpy(new_sg, sg, sizeof(*sg));
-		sg_dma_address(new_sg) = 0;
-		sg_dma_len(new_sg) = 0;
-		new_sg = sg_next(new_sg);
-	}
-
-	return new_table;
-}
-
-static void free_duped_table(struct sg_table *table)
-{
-	sg_free_table(table);
-	kfree(table);
-}
-
-struct ion_dma_buf_attachment {
-	struct device *dev;
-	struct sg_table *table;
-	struct list_head list;
-	bool dma_mapped;
-};
-
-static int ion_dma_buf_attach(struct dma_buf *dmabuf, struct device *dev,
-				struct dma_buf_attachment *attachment)
-{
-	struct ion_dma_buf_attachment *a;
-	struct sg_table *table;
-	struct ion_buffer *buffer = container_of(dmabuf->priv, typeof(*buffer),
-						 iommu_data);
-
-	a = kzalloc(sizeof(*a), GFP_KERNEL);
-	if (!a)
-		return -ENOMEM;
-
-	table = dup_sg_table(buffer->sg_table);
-	if (IS_ERR(table)) {
-		kfree(a);
-		return -ENOMEM;
-	}
-
-	a->table = table;
-	a->dev = dev;
-	a->dma_mapped = false;
-	INIT_LIST_HEAD(&a->list);
-
-	attachment->priv = a;
-
-	mutex_lock(&buffer->lock);
-	list_add(&a->list, &buffer->attachments);
-	mutex_unlock(&buffer->lock);
-
-	return 0;
-}
-
-static void ion_dma_buf_detatch(struct dma_buf *dmabuf,
-				struct dma_buf_attachment *attachment)
-{
-	struct ion_dma_buf_attachment *a = attachment->priv;
-	struct ion_buffer *buffer = container_of(dmabuf->priv, typeof(*buffer),
-						 iommu_data);
-
-	mutex_lock(&buffer->lock);
-	list_del(&a->list);
-	mutex_unlock(&buffer->lock);
-	free_duped_table(a->table);
-
-	kfree(a);
-}
-
-
 static struct sg_table *ion_map_dma_buf(struct dma_buf_attachment *attachment,
 					enum dma_data_direction dir)
 {
@@ -243,12 +102,7 @@ static struct sg_table *ion_map_dma_buf(struct dma_buf_attachment *attachment,
 	struct ion_buffer *buffer = container_of(dmabuf->priv, typeof(*buffer),
 						 iommu_data);
 	struct ion_dma_buf_attachment *a = attachment->priv;
-	struct sg_table *table;
-	int count, map_attrs;
-	struct ion_buffer *buffer = container_of(attachment->dmabuf->priv,
-						 typeof(*buffer), iommu_data);
-
-	table = a->table;
+	int count, map_attrs = attachment->dma_map_attrs;
 
 	if (!(buffer->flags & ION_FLAG_CACHED) ||
 	    !hlos_accessible_buffer(buffer))
@@ -273,9 +127,9 @@ static void ion_unmap_dma_buf(struct dma_buf_attachment *attachment,
 			      struct sg_table *table,
 			      enum dma_data_direction dir)
 {
-	int map_attrs;
-	struct ion_buffer *buffer = container_of(attachment->dmabuf->priv,
-						 typeof(*buffer), iommu_data);
+	struct dma_buf *dmabuf = attachment->dmabuf;
+	struct ion_buffer *buffer = container_of(dmabuf->priv, typeof(*buffer),
+						 iommu_data);
 	struct ion_dma_buf_attachment *a = attachment->priv;
 	int map_attrs = attachment->dma_map_attrs;
 
@@ -298,7 +152,7 @@ static int ion_mmap(struct dma_buf *dmabuf, struct vm_area_struct *vma)
 {
 	struct ion_buffer *buffer = container_of(dmabuf->priv, typeof(*buffer),
 						 iommu_data);
-	int ret = 0;
+	struct ion_heap *heap = buffer->heap;
 
 	if (!buffer->heap->ops->map_user)
 		return -EINVAL;
@@ -313,6 +167,7 @@ static void ion_dma_buf_release(struct dma_buf *dmabuf)
 {
 	struct ion_buffer *buffer = container_of(dmabuf->priv, typeof(*buffer),
 						 iommu_data);
+	struct ion_heap *heap = buffer->heap;
 
 	if (heap->flags & ION_HEAP_FLAG_DEFER_FREE)
 		queue_work(heap->wq, &buffer->free);
@@ -324,7 +179,11 @@ static void *ion_dma_buf_vmap(struct dma_buf *dmabuf)
 {
 	struct ion_buffer *buffer = container_of(dmabuf->priv, typeof(*buffer),
 						 iommu_data);
-	void *vaddr = ERR_PTR(-EINVAL);
+	struct ion_heap *heap = buffer->heap;
+	void *vaddr;
+
+	if (!heap->ops->map_kernel)
+		return ERR_PTR(-ENODEV);
 
 	mutex_lock(&buffer->kmap_lock);
 	if (buffer->kmap_refcount) {
@@ -348,6 +207,7 @@ static void ion_dma_buf_vunmap(struct dma_buf *dmabuf, void *vaddr)
 {
 	struct ion_buffer *buffer = container_of(dmabuf->priv, typeof(*buffer),
 						 iommu_data);
+	struct ion_heap *heap = buffer->heap;
 
 	mutex_lock(&buffer->kmap_lock);
 	if (!--buffer->kmap_refcount)
@@ -576,7 +436,6 @@ static int ion_dma_buf_get_flags(struct dma_buf *dmabuf, unsigned long *flags)
 {
 	struct ion_buffer *buffer = container_of(dmabuf->priv, typeof(*buffer),
 						 iommu_data);
-	*flags = buffer->flags;
 
 	*flags = buffer->flags;
 	return 0;
@@ -653,12 +512,12 @@ struct dma_buf *ion_alloc_dmabuf(size_t len, unsigned int heap_id_mask,
 	else
 		ops = &dma_buf_ops_no_cpu_access;
 
-	exp_info.ops = &dma_buf_ops;
-	exp_info.size = buffer->size;
-	exp_info.flags = O_RDWR;
-	exp_info.priv = &buffer->iommu_data;
-	exp_info.exp_name = kasprintf(GFP_KERNEL, "%s-%s-%d-%s", KBUILD_MODNAME,
-				      heap->name, current->tgid, task_comm);
+	exp_info = (typeof(exp_info)){
+		.ops = ops,
+		.size = buffer->size,
+		.flags = O_RDWR,
+		.priv = &buffer->iommu_data
+	};
 
 	dmabuf = dma_buf_export(&exp_info);
 	if (IS_ERR(dmabuf))

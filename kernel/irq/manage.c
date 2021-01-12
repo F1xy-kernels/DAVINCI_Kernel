@@ -367,8 +367,6 @@ irq_set_affinity_notifier(unsigned int irq, struct irq_affinity_notify *notify)
 	raw_spin_unlock_irqrestore(&desc->lock, flags);
 
 	if (old_notify) {
-		if (notify)
-			WARN(1, "overwriting previous IRQ affinity notifier\n");
 		if (cancel_work_sync(&old_notify->work)) {
 			/* Pending work had a ref, put that one too */
 			kref_put(&old_notify->kref, old_notify->release);
@@ -1153,7 +1151,8 @@ setup_irq_thread(struct irqaction *new, unsigned int irq, bool secondary)
 	 * the thread dies to avoid that the interrupt code
 	 * references an already freed task_struct.
 	 */
-	new->thread = get_task_struct(t);
+	get_task_struct(t);
+	new->thread = t;
 	/*
 	 * Tell the thread to set its affinity. This is
 	 * important for shared interrupt handlers as we do
@@ -1539,7 +1538,7 @@ __setup_irq(unsigned int irq, struct irq_desc *desc, struct irqaction *new)
 			irqd_set(&desc->irq_data, IRQD_NO_BALANCING);
 		}
 
-		if (new->flags & IRQF_PERF_CRITICAL)
+		if (new->flags & IRQF_PERF_CRITICAL) 
 			setup_perf_irq_locked(desc);
 
 		if (irq_settings_can_autoenable(desc)) {
@@ -2133,20 +2132,6 @@ static struct irqaction *__free_percpu_irq(unsigned int irq, void __percpu *dev_
 		WARN(1, "percpu IRQ %d still enabled on CPU%d!\n",
 		     irq, cpumask_first(desc->percpu_enabled));
 		goto bad;
-	}
-
-	if (irqd_has_set(&desc->irq_data, IRQF_PERF_CRITICAL)) {
-		struct irq_desc_list *data;
-
-		raw_spin_lock(&perf_irqs_lock);
-		list_for_each_entry(data, &perf_crit_irqs.list, list) {
-			if (data->desc == desc) {
-				list_del(&data->list);
-				kfree(data);
-				break;
-			}
-		}
-		raw_spin_unlock(&perf_irqs_lock);
 	}
 
 	/* Found it - now remove it from the list of entries: */

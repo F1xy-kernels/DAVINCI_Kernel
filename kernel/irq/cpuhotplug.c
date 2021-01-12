@@ -110,8 +110,6 @@ static bool migrate_one_irq(struct irq_desc *desc)
 	if (maskchip && chip->irq_mask)
 		chip->irq_mask(d);
 
-	if (cpumask_empty(d->common->old_affinity))
-		cpumask_copy(d->common->old_affinity, affinity);
 	cpumask_copy(&available_cpus, affinity);
 	cpumask_andnot(&available_cpus, &available_cpus, cpu_isolated_mask);
 	affinity = &available_cpus;
@@ -192,7 +190,6 @@ static bool migrate_one_irq(struct irq_desc *desc)
  */
 void irq_migrate_all_off_this_cpu(void)
 {
-	unsigned int cpu = smp_processor_id();
 	struct irq_desc *desc;
 	unsigned int irq;
 
@@ -202,18 +199,6 @@ void irq_migrate_all_off_this_cpu(void)
 		desc = irq_to_desc(irq);
 		if (!desc)
 			continue;
-
-		if (irqd_has_set(&desc->irq_data, IRQF_PERF_CRITICAL)) {
-			bool on_cpu;
-
-			raw_spin_lock(&desc->lock);
-			on_cpu = cpumask_test_cpu(cpu,
-				irq_data_get_affinity_mask(&desc->irq_data));
-			raw_spin_unlock(&desc->lock);
-			if (on_cpu)
-				reaffine_perf_irqs();
-			continue;
-		}
 
 		raw_spin_lock(&desc->lock);
 		affinity_broken = migrate_one_irq(desc);
@@ -229,7 +214,7 @@ void irq_migrate_all_off_this_cpu(void)
 static void irq_restore_affinity_of_irq(struct irq_desc *desc, unsigned int cpu)
 {
 	struct irq_data *data = irq_desc_get_irq_data(desc);
-	const struct cpumask *affinity = data->common->old_affinity;
+	const struct cpumask *affinity = irq_data_get_affinity_mask(data);
 
 	if (!irqd_affinity_is_managed(data) || !desc->action ||
 	    !irq_data_get_irq_chip(data) || !cpumask_test_cpu(cpu, affinity))
@@ -240,8 +225,13 @@ static void irq_restore_affinity_of_irq(struct irq_desc *desc, unsigned int cpu)
 		return;
 	}
 
-	irq_set_affinity_locked(data, affinity, false);
-	cpumask_clear(data->common->old_affinity);
+	/*
+	 * If the interrupt can only be directed to a single target
+	 * CPU then it is already assigned to a CPU in the affinity
+	 * mask. No point in trying to move it around.
+	 */
+	if (!irqd_is_single_target(data))
+		irq_set_affinity_locked(data, affinity, false);
 }
 
 /**
@@ -250,17 +240,12 @@ static void irq_restore_affinity_of_irq(struct irq_desc *desc, unsigned int cpu)
  */
 int irq_affinity_online_cpu(unsigned int cpu)
 {
-	bool perf = !cpumask_test_cpu(cpu, cpu_lp_mask);
 	struct irq_desc *desc;
 	unsigned int irq;
 
 	irq_lock_sparse();
 	for_each_active_irq(irq) {
 		desc = irq_to_desc(irq);
-		if (perf && irqd_has_set(&desc->irq_data, IRQF_PERF_CRITICAL)) {
-			reaffine_perf_irqs();
-			continue;
-		}
 		raw_spin_lock_irq(&desc->lock);
 		irq_restore_affinity_of_irq(desc, cpu);
 		raw_spin_unlock_irq(&desc->lock);

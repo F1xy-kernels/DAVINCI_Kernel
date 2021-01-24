@@ -2168,6 +2168,8 @@ int ufs_qcom_testbus_config(struct ufs_qcom_host *host)
 	mask <<= offset;
 
 	spin_unlock_irqrestore(hba->host->host_lock, flags);
+	pm_runtime_get_sync(host->hba->dev);
+	ufshcd_hold(host->hba, false);
 	if (reg) {
 		ufshcd_rmwl(host->hba, TEST_BUS_SEL,
 		    (u32)host->testbus.select_major << testbus_sel_offset,
@@ -2186,7 +2188,10 @@ int ufs_qcom_testbus_config(struct ufs_qcom_host *host)
 	 * committed before returning.
 	 */
 	mb();
+
 out:
+	ufshcd_release(host->hba, false);
+	pm_runtime_put_sync(host->hba->dev);
 	return ret;
 }
 

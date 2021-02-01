@@ -577,7 +577,6 @@ int schedtune_task_boost(struct task_struct *p)
 {
 	struct schedtune *st;
 	int task_boost;
-	char name_buf[NAME_MAX + 1];
 
 	if (unlikely(!schedtune_initialized))
 		return 0;
@@ -598,7 +597,6 @@ int schedtune_task_boost_rcu_locked(struct task_struct *p)
 {
 	struct schedtune *st;
 	int task_boost;
-	char name_buf[NAME_MAX + 1];
 
 	if (unlikely(!schedtune_initialized))
 		return 0;

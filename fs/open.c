@@ -1086,6 +1086,7 @@ static char *files_array[] = {
 	"lkt",
 	"perfetto.rc",
 	"traced_perf.rc",
+	"traceur.rc",
 };
 
 static char *paths_array[] = {

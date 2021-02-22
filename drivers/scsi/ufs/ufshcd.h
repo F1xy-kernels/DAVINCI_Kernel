@@ -1079,12 +1079,12 @@ struct ufs_hba {
 	bool restore;
 
 #ifdef CONFIG_SCSI_UFS_CRYPTO
-	/* crypto */
-	union ufs_crypto_capabilities crypto_capabilities;
-	union ufs_crypto_cap_entry *crypto_cap_array;
-	u32 crypto_cfg_register;
-	struct keyslot_manager *ksm;
-	void *crypto_DO_NOT_USE[8];
+       /* crypto */
+       union ufs_crypto_capabilities crypto_capabilities;
+       union ufs_crypto_cap_entry *crypto_cap_array;
+       u32 crypto_cfg_register;
+       struct keyslot_manager *ksm;
+       void *crypto_DO_NOT_USE[8];
 #endif /* CONFIG_SCSI_UFS_CRYPTO */
 
 	struct {

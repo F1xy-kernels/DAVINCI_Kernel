@@ -135,7 +135,7 @@ long kgsl_ioctl_helper(struct file *filep, unsigned int cmd, unsigned long arg,
 	struct kgsl_device_private *dev_priv = filep->private_data;
 	unsigned char data[128] = { 0 };
 	unsigned int nr = _IOC_NR(cmd);
-	long ret;
+	int ret;
 
 	static DEFINE_RATELIMIT_STATE(_rs,
 			DEFAULT_RATELIMIT_INTERVAL,
@@ -201,7 +201,7 @@ long kgsl_ioctl(struct file *filep, unsigned int cmd, unsigned long arg)
 {
 	struct cpumask qos_cpus;
 	struct pm_qos_request req;
-	long ret;
+	int ret;
 	/*
 	 * Optimistically assume the current task won't migrate to another CPU
 	 * and restrict the current CPU to shallow idle states so that it won't

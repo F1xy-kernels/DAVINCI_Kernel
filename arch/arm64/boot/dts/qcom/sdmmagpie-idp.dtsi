@@ -358,6 +358,7 @@
 	qcom,battery-data = <&mtp_batterydata>;
 	qcom,qg-iterm-ma = <100>;
 	qcom,cl-feedback-on;
+	qcom,qg-fast-chg-config;
 
 	/* Tweak SOC curve to be more linear and monotonic */
 	/* necessary for linearize-soc, like TCSS */

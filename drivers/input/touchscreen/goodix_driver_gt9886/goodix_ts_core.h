@@ -483,10 +483,11 @@ struct goodix_ts_core {
 	struct work_struct sleep_work;
 	bool tp_already_suspend;
 	struct completion pm_resume_completion;
-	struct pm_qos_request pm_touch_req;
 #ifdef CONFIG_TOUCHSCREEN_GOODIX_DEBUG_FS
 	struct dentry *debugfs;
 #endif
+
+	struct pm_qos_request pm_touch_req;
 };
 
 struct goodix_mode_switch {

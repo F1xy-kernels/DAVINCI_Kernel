@@ -28,9 +28,6 @@
 #include <linux/sysfs.h>
 #include <linux/workqueue.h>
 
-#include <linux/regulator/consumer.h>
-#include <linux/pm_qos.h>
-#include <linux/spi/spi-geni-qcom.h>
 
 #ifdef CONFIG_HAS_EARLYSUSPEND
 #include <linux/earlysuspend.h>
@@ -114,8 +111,8 @@ extern const uint16_t gesture_key_array[];
 //---ESD Protect.---
 #define NVT_TOUCH_ESD_PROTECT 1
 #define NVT_TOUCH_ESD_CHECK_PERIOD 1500	/* ms */
-#define NVT_TOUCH_WDT_RECOVERY 0
-#define NVT_TOUCH_ESD_DISP_RECOVERY 0
+#define NVT_TOUCH_WDT_RECOVERY 1
+#define NVT_TOUCH_ESD_DISP_RECOVERY 1
 
 struct nvt_config_info {
 	u8 tp_vendor;
@@ -182,8 +179,6 @@ struct nvt_ts_data {
 	struct pinctrl *ts_pinctrl;
 	struct pinctrl_state *pinctrl_state_active;
 	struct pinctrl_state *pinctrl_state_suspend;
-	struct pm_qos_request pm_spi_req;
-	struct pm_qos_request pm_touch_req;
 #ifndef NVT_SAVE_TESTDATA_IN_FILE
 	void *testdata;
 #endif
@@ -202,16 +197,10 @@ struct nvt_ts_data {
 	bool fw_debug;
 #ifdef CONFIG_TOUCHSCREEN_NVT_DEBUG_FS
 	struct dentry *debugfs;
-/*2019.12.16 longcheer taocheng add (xiaomi game mode) start*/
-#ifdef CONFIG_TOUCHSCREEN_XIAOMI_TOUCHFEATURE
-	u8 palm_sensor_switch;
-	bool palm_sensor_changed;
-	bool gamemode_enabled;
 #endif
 	struct workqueue_struct *event_wq;
 	/*struct work_struct suspend_work;*/
 	struct work_struct resume_work;
-	struct work_struct irq_work;
 	int result_type;
 	int ic_state;
 	int gesture_command_delayed;

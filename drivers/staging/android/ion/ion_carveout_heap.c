@@ -186,6 +186,8 @@ struct ion_sc_entry {
 	struct list_head list;
 	struct ion_heap *heap;
 	u32 token;
+	u64 base;
+	u64 size;
 };
 
 struct ion_sc_heap {
@@ -240,6 +242,24 @@ static void ion_sc_heap_free(struct ion_buffer *buffer)
 	ion_carveout_free(child, paddr, buffer->size);
 	sg_free_table(table);
 	kfree(table);
+}
+
+static int ion_secure_carveout_pm_freeze(struct ion_heap *heap)
+{
+	return 0;
+}
+
+static int ion_secure_carveout_pm_restore(struct ion_heap *heap)
+{
+	struct ion_sc_heap *manager;
+	struct ion_sc_entry *child;
+
+	manager = container_of(heap, struct ion_sc_heap, heap);
+
+	list_for_each_entry(child, &manager->children, list)
+		ion_hyp_assign_from_flags(
+			child->base, child->size, child->token);
+	return 0;
 }
 
 static struct ion_heap_ops ion_sc_heap_ops = {
@@ -298,6 +318,8 @@ static int ion_sc_add_child(struct ion_sc_heap *manager,
 	heap_data.priv = dev;
 	heap_data.base = base;
 	heap_data.size = size;
+	entry->base = base;
+	entry->size = size;
 
 	/* This will zero memory initially */
 	entry->heap = __ion_carveout_heap_create(&heap_data, false);

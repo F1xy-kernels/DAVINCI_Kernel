@@ -273,21 +273,6 @@ static inline int32_t spi_read_write(struct spi_device *client, uint8_t *buf, si
 	return spi_sync(client, &m);
 }
 
-static void nvt_pm_qos(bool enable)
-{
-	if (unlikely(!pm_qos_request_active(&ts->pm_touch_req)) ||
-		unlikely(!pm_qos_request_active(&ts->pm_spi_req)))
-		return;
-
-	if (enable) {
-		pm_qos_update_request(&ts->pm_touch_req, 100);
-		pm_qos_update_request(&ts->pm_spi_req, 100);
-	} else {
-		pm_qos_update_request(&ts->pm_touch_req, PM_QOS_DEFAULT_VALUE);
-		pm_qos_update_request(&ts->pm_spi_req, PM_QOS_DEFAULT_VALUE);
-	}
-}
-
 /*******************************************************
 Description:
 	Novatek touchscreen spi read function.
@@ -1425,6 +1410,7 @@ static uint8_t nvt_wdt_fw_recovery(uint8_t *point_data)
 }
 #endif	/* #if NVT_TOUCH_WDT_RECOVERY */
 
+#define POINT_DATA_LEN 65
 /*******************************************************
 Description:
 	Novatek touchscreen work function.
@@ -1432,11 +1418,8 @@ Description:
 return:
 	n.a.
 *******************************************************/
-#define POINT_DATA_LEN 65
-static void nvt_ts_worker(struct work_struct *work)
+static irqreturn_t nvt_ts_work_func(int irq, void *data)
 {
-	struct nvt_ts_data *ts = container_of(work, struct nvt_ts_data, irq_work);
-
 	int32_t ret = -1;
 	uint8_t point_data[POINT_DATA_LEN + 1 + DUMMY_BYTES] = {0};
 	uint32_t position = 0;
@@ -1455,15 +1438,15 @@ static void nvt_ts_worker(struct work_struct *work)
 	}
 #endif
 
+	mutex_lock(&ts->lock);
+
 	if (ts->dev_pm_suspend) {
 		ret = wait_for_completion_timeout(&ts->dev_pm_suspend_completion, msecs_to_jiffies(500));
 		if (!ret) {
 			NVT_ERR("system(spi) can't finished resuming procedure, skip it\n");
-			return;
+			goto XFER_ERROR;
 		}
 	}
-
-	nvt_pm_qos(true);
 
 	ret = CTP_SPI_READ(ts->client, point_data, POINT_DATA_LEN + 1);
 	if (ret < 0) {
@@ -1511,10 +1494,11 @@ static void nvt_ts_worker(struct work_struct *work)
 #endif
 
 #if WAKEUP_GESTURE
-	if (unlikely(!bTouchIsAwake)) {
-		//input_id = (uint8_t)(point_data[1] >> 3);
+	if (bTouchIsAwake == 0) {
+		input_id = (uint8_t)(point_data[1] >> 3);
 		nvt_ts_wakeup_gesture_report(input_id, point_data);
-		goto XFER_ERROR;
+		mutex_unlock(&ts->lock);
+		return IRQ_HANDLED;
 	}
 #endif
 
@@ -1594,27 +1578,16 @@ static void nvt_ts_worker(struct work_struct *work)
 		}
 	}
 #endif
+
 	input_sync(ts->input_dev);
 
 XFER_ERROR:
-	nvt_pm_qos(false);
 
-	return;
-}
+	mutex_unlock(&ts->lock);
 
-/*******************************************************
-Description:
-	Novatek touchscreen irq handler.
-return:
-	n.a.
-*******************************************************/
-static irqreturn_t nvt_ts_work_func(int irq, void *data)
-{
-	struct nvt_ts_data *ts = data;
-	int cpu = cpumask_first(cpu_perf_mask);
-	queue_work_on(cpu, ts->workqueue, &ts->irq_work);
 	return IRQ_HANDLED;
 }
+
 
 /*******************************************************
 Description:
@@ -2478,9 +2451,8 @@ static int32_t nvt_ts_probe(struct platform_device *pdev)
 	if (ts->client->irq) {
 		NVT_LOG("int_trigger_type=%d\n", ts->int_trigger_type);
 		ts->irq_enabled = true;
-		ret = request_threaded_irq(client->irq, NULL, nvt_ts_work_func,
-				ts->int_trigger_type |
-				IRQF_ONESHOT, NVT_SPI_NAME, ts);
+		ret = request_threaded_irq(ts->client->irq, NULL, nvt_ts_work_func,
+				ts->int_trigger_type | IRQF_ONESHOT, NVT_SPI_NAME, ts);
 		if (ret != 0) {
 			NVT_ERR("request irq failed. ret=%d\n", ret);
 			goto err_int_request_failed;
@@ -2499,17 +2471,6 @@ static int32_t nvt_ts_probe(struct platform_device *pdev)
 	INIT_DELAYED_WORK(&ts->nvt_lockdown_work, get_lockdown_info);
 	// please make sure boot update start after display reset(RESX) sequence
 	queue_delayed_work(nvt_lockdown_wq, &ts->nvt_lockdown_work, msecs_to_jiffies(5000));
-
-	ts->pm_spi_req.type = PM_QOS_REQ_AFFINE_IRQ;
-	ts->pm_spi_req.irq = geni_spi_get_master_irq(client);
-	irq_set_perf_affinity(ts->pm_spi_req.irq);
-	pm_qos_add_request(&ts->pm_spi_req, PM_QOS_CPU_DMA_LATENCY,
-		PM_QOS_DEFAULT_VALUE);
-
-	ts->pm_touch_req.type = PM_QOS_REQ_AFFINE_IRQ;
-	ts->pm_touch_req.irq = client->irq;
-	pm_qos_add_request(&ts->pm_touch_req, PM_QOS_CPU_DMA_LATENCY,
-		PM_QOS_DEFAULT_VALUE);
 
 #if WAKEUP_GESTURE
 	device_init_wakeup(&ts->input_dev->dev, 1);
@@ -2596,7 +2557,6 @@ static int32_t nvt_ts_probe(struct platform_device *pdev)
 	}
 	INIT_WORK(&ts->resume_work, nvt_resume_work);
 	/*INIT_WORK(&ts->suspend_work, nvt_suspend_work);*/
-	INIT_WORK(&ts->irq_work, nvt_ts_worker);
 
 #if defined(CONFIG_FB)
 #ifdef _DRM_NOTIFIER_H_
@@ -2743,8 +2703,6 @@ static int32_t nvt_ts_remove(struct platform_device *pdev)
 {
 	NVT_LOG("Removing driver...\n");
 
-	pm_qos_remove_request(&ts->pm_touch_req);
-	pm_qos_remove_request(&ts->pm_spi_req);
 #if defined(CONFIG_FB)
 #ifdef _DRM_NOTIFIER_H_
 	if (drm_unregister_client(&ts->drm_notif))
@@ -3245,9 +3203,7 @@ static void __exit nvt_driver_exit(void)
 {
 	platform_driver_unregister(&nvt_driver);
 }
-
-device_initcall(nvt_driver_init);
-module_exit(nvt_driver_exit);
+late_initcall(nvt_driver_init);
 
 MODULE_DESCRIPTION("Novatek Touchscreen Driver");
 MODULE_LICENSE("GPL");

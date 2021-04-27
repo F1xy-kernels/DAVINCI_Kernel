@@ -52,7 +52,6 @@
 #include <linux/notifier.h>
 #include <linux/fb.h>
 #endif
-#include <linux/pm_qos.h>
 
 /* macros definition */
 #define GOODIX_CORE_DRIVER_NAME		"goodix_ts"
@@ -487,7 +486,6 @@ struct goodix_ts_core {
 	struct dentry *debugfs;
 #endif
 
-	struct pm_qos_request pm_touch_req;
 };
 
 struct goodix_mode_switch {
@@ -695,10 +693,14 @@ static inline u32 checksum_be32(u8 *data, u32 size)
 #define EMEMCMP					1003
 
 /* log macro */
+#define ts_info(fmt, arg...)	((void)0)
+#define	ts_err(fmt, arg...)	((void)0)
 #define boot_log(fmt, arg...)	g_info(fmt, ##arg)
-#define ts_info(fmt, arg...)	pr_debug("[GTP9886-INF][%s:%d] "fmt"\n", __func__, __LINE__, ##arg)
-#define ts_err(fmt, arg...)	pr_debug("[GTP9886-ERR][%s:%d] "fmt"\n", __func__, __LINE__, ##arg)
-#define ts_debug(fmt, arg...)	pr_debug("[GTP9886-DBG][%s:%d] "fmt"\n", __func__, __LINE__, ##arg)
+#ifdef CONFIG_GOODIX_DEBUG
+#define ts_debug(fmt, arg...)	((void)0)
+#else
+#define ts_debug(fmt, arg...)	do {} while (0)
+#endif
 
 /**
  * goodix_register_ext_module - interface for external module

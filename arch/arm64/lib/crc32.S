@@ -89,7 +89,7 @@ CPU_BE(	rev16		w3, w3		)
 
 	.align		5
 ENTRY(crc32_le)
-#ifndef CONFIG_LTO_MENU
+#ifndef CONFIG_LTO_GCC
 alternative_if_not ARM64_HAS_CRC32
 	b		crc32_le_base
 alternative_else_nop_endif
@@ -99,7 +99,7 @@ ENDPROC(crc32_le)
 
 	.align		5
 ENTRY(__crc32c_le)
-#ifndef CONFIG_LTO_MENU
+#ifndef CONFIG_LTO_GCC
 alternative_if_not ARM64_HAS_CRC32
 	b		__crc32c_le_base
 alternative_else_nop_endif

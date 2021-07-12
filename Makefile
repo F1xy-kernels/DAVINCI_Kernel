@@ -689,7 +689,7 @@ LDFLAGS		+= --plugin-opt=O3
 endif
 
 ifdef CONFIG_LTO_GCC
-LTO_CFLAGS	:= -flto -flto=jobserver -fno-fat-lto-objects \
+LTO_CFLAGS	:= -flto -flto=jobserver -fipa-pta -fno-fat-lto-objects \
 		   -fuse-linker-plugin -fwhole-program
 KBUILD_CFLAGS	+= $(LTO_CFLAGS)
 LTO_LDFLAGS	:= $(LTO_CFLAGS) -Wno-lto-type-mismatch -Wno-psabi \
@@ -742,12 +742,20 @@ endif
 endif
 
 ifdef CONFIG_INLINE_OPTIMIZATION
-KBUILD_CFLAGS	+= -mllvm -inline-threshold=1000
-KBUILD_CFLAGS	+= -mllvm -inlinehint-threshold=750
-# We limit inlining to 5KB on the stack.
-KBUILD_CFLAGS	+= --param large-stack-frame=12288
-KBUILD_CFLAGS	+= --param inline-min-speedup=5
-KBUILD_CFLAGS	+= --param inline-unit-growth=60
+ifdef CONFIG_LTO_GCC
+KBUILD_CFLAGS +=--param=max-inline-insns-single=600 \
+		--param=max-inline-insns-auto=750 \
+		--param=large-stack-frame=12288 \
+		--param=inline-min-speedup=5 \
+		--param=inline-unit-growth=60
+endif
+ifdef CONFIG_LTO_CLANG
+KBUILD_CFLAGS  += -mllvm -inline-threshold=1000
+KBUILD_CFLAGS  += -mllvm -inlinehint-threshold=750
+KBUILD_CFLAGS  += --param large-stack-frame=12288
+KBUILD_CFLAGS  += --param inline-min-speedup=5
+KBUILD_CFLAGS  += --param inline-unit-growth=60
+endif
 endif
 
 ifdef CONFIG_POLLY_CLANG
@@ -839,6 +847,7 @@ KBUILD_CFLAGS += $(call cc-option,-fno-delete-null-pointer-checks,)
 # These warnings generated too much noise in a regular build.
 # Use make W=1 to enable them (see scripts/Makefile.extrawarn)
 KBUILD_CFLAGS += $(call cc-disable-warning, unused-but-set-variable)
+endif
 
 ifeq ($(ld-name),lld)
 LDFLAGS += -O3
@@ -933,10 +942,10 @@ endif
 
 ifdef CONFIG_LTO_CLANG
 ifdef CONFIG_THINLTO
-lto-clang-flags	:= -flto=thin
+lto-clang-flags	:= -flto=thin -fwhole-program-vtables
 LDFLAGS		+= --thinlto-cache-dir=.thinlto-cache
 else
-lto-clang-flags	:= -flto
+lto-clang-flags	:= -flto=full -fvirtual-function-elimination -fwhole-program-vtables
 endif
 lto-clang-flags += -fvisibility=default $(call cc-option, -fsplit-lto-unit)
 
@@ -957,7 +966,7 @@ ifdef CONFIG_LTO
 LTO_CFLAGS	:= $(lto-clang-flags)
 KBUILD_CFLAGS	+= $(LTO_CFLAGS)
 
-DISABLE_LTO	:= $(DISABLE_LTO_CLANG)
+DISABLE_LTO	:= $(DISABLE_LTO_CLANG) -fno-whole-program-vtables -fno-virtual-function-elimination
 export LTO_CFLAGS DISABLE_LTO
 
 # LDFINAL_vmlinux and LDFLAGS_FINAL_vmlinux can be set to override

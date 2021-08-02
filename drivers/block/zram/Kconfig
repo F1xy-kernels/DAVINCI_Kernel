@@ -3,6 +3,7 @@ config ZRAM
 	tristate "Compressed RAM block device support"
 	depends on BLOCK && SYSFS && CRYPTO
 	select ZPOOL
+	select CRYPTO_LZ4
 	default n
 	help
 	  Creates virtual block devices called /dev/zramX (X = 0, 1, ...).
@@ -69,7 +70,7 @@ endif
 
 config ZRAM_DEFAULT_COMP_ALGORITHM
 	string "Default ZRAM compression algorithm"
-	default "zstd"
+	default "lz4"
 
 config ZRAM_SIZE_OVERRIDE
 	int "zram size to set from kernel"

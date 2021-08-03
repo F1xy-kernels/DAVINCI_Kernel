@@ -732,7 +732,7 @@ KBUILD_LDFLAGS	+= -Os
 else
 KBUILD_AFLAGS   += -O3
 KBUILD_CFLAGS   += -O3
-KBUILD_LDFLAGS   += -O3 --lto-O2
+KBUILD_LDFLAGS   += -O3 --lto-O2 --verbose
 ifeq ($(cc-name),gcc)
 KBUILD_CFLAGS	+= -mcpu=cortex-a76.cortex-a55 -mtune=cortex-a76.cortex-a55
 endif
@@ -850,7 +850,7 @@ KBUILD_CFLAGS += $(call cc-disable-warning, unused-but-set-variable)
 endif
 
 ifeq ($(ld-name),lld)
-LDFLAGS += -O3
+LDFLAGS += -O3 --verbose
 endif
 
 KBUILD_CFLAGS += $(call cc-disable-warning, unused-const-variable)
